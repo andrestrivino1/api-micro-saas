@@ -2,7 +2,6 @@ import { plainToInstance } from 'class-transformer';
 import {
   IsInt,
   IsString,
-  IsUrl,
   Min,
   validateSync,
 } from 'class-validator';
@@ -38,7 +37,9 @@ export class EnvironmentVariables {
   @Min(1)
   PORT!: number;
 
-  @IsUrl({ require_tld: false })
+  // Lista separada por coma de orígenes exactos o regex `/.../`. Validación
+  // sólo verifica que sea string no vacío; el parsing real ocurre en main.ts.
+  @IsString()
   CORS_ORIGIN!: string;
 }
 

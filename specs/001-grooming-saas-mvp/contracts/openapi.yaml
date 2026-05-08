@@ -103,14 +103,25 @@ paths:
   /appointments:
     get:
       tags: [Appointments]
-      summary: Listar citas (filtro por fecha opcional)
+      summary: Listar citas (filtro por día o rango)
+      description: |
+        Tres modos:
+        1. Sin parámetros — citas del día actual (zona horaria del servidor).
+        2. `?date=YYYY-MM-DD` — citas de un día específico (medianoche local).
+        3. `?from=YYYY-MM-DD&to=YYYY-MM-DD` — rango inclusivo en ambos extremos.
       parameters:
         - in: query
           name: date
-          schema:
-            type: string
-            format: date
-          description: Si se omite, devuelve las citas del día actual.
+          schema: { type: string, format: date }
+          description: Día específico (ignorado si se pasa `from`/`to`).
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+          description: Inicio de rango (inclusivo). Requiere `to`.
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+          description: Fin de rango (inclusivo). Requiere `from`.
       responses:
         '200':
           description: OK

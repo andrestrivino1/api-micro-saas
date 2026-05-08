@@ -21,8 +21,10 @@ export class AppointmentsController {
   async list(
     @CurrentTenant() tenantId: string,
     @Query('date') date?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ): Promise<AppointmentDto[]> {
-    return this.appointments.findForDate(tenantId, date);
+    return this.appointments.findInRange(tenantId, { date, from, to });
   }
 
   @Post()

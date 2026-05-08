@@ -23,6 +23,36 @@ export interface AppointmentDto {
   createdAt: string;
 }
 
+function parseLocalYmd(value: string): Date | null {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+function resolveRange(opts: { date?: string; from?: string; to?: string }): {
+  start: Date;
+  end: Date;
+} {
+  // Range mode (?from=&to=): inclusive on both ends, end snaps to next day midnight
+  if (opts.from && opts.to) {
+    const fromDate = parseLocalYmd(opts.from) ?? new Date(opts.from);
+    const toDate = parseLocalYmd(opts.to) ?? new Date(opts.to);
+    const start = new Date(fromDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(toDate);
+    end.setHours(0, 0, 0, 0);
+    end.setDate(end.getDate() + 1);
+    return { start, end };
+  }
+  // Single-day mode (?date= or no param): defaults to today (server local)
+  const target = opts.date ? (parseLocalYmd(opts.date) ?? new Date(opts.date)) : new Date();
+  const start = new Date(target);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
 @Injectable()
 export class AppointmentsService {
   constructor(
@@ -34,12 +64,11 @@ export class AppointmentsService {
     private readonly petsRepo: Repository<Pet>,
   ) {}
 
-  async findForDate(tenantId: string, date?: string): Promise<AppointmentDto[]> {
-    const target = date ? new Date(date) : new Date();
-    const start = new Date(target);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
+  async findInRange(
+    tenantId: string,
+    opts: { date?: string; from?: string; to?: string } = {},
+  ): Promise<AppointmentDto[]> {
+    const { start, end } = resolveRange(opts);
 
     const appointments = await this.apptsRepo.find({
       where: {

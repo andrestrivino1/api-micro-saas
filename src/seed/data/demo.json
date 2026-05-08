@@ -1,0 +1,27 @@
+{
+  "clients": [
+    { "name": "María González", "phone": "+57 300 100 0001", "pet": { "name": "Luna", "breed": "Golden Retriever", "notes": "Le encanta el agua, baño largo." } },
+    { "name": "Carlos Rodríguez", "phone": "+57 300 100 0002", "pet": { "name": "Max", "breed": "Labrador", "notes": "Energético, requiere paciencia." } },
+    { "name": "Ana Martínez", "phone": "+57 300 100 0003", "pet": { "name": "Coco", "breed": "Caniche Toy", "notes": "Pelaje delicado." } },
+    { "name": "Diego Pérez", "phone": "+57 300 100 0004", "pet": { "name": "Bobby", "breed": "Schnauzer Mediano", "notes": "Sensible en las patas." } },
+    { "name": "Laura Torres", "phone": "+57 300 100 0005", "pet": { "name": "Nala", "breed": "Border Collie", "notes": "Muy obediente." } },
+    { "name": "Andrés Ramírez", "phone": "+57 300 100 0006", "pet": { "name": "Toby", "breed": "Beagle", "notes": "Le gustan los premios." } },
+    { "name": "Camila López", "phone": "+57 300 100 0007", "pet": { "name": "Lola", "breed": "Bulldog Francés", "notes": "Pliegues requieren limpieza extra." } },
+    { "name": "Felipe Castro", "phone": "+57 300 100 0008", "pet": { "name": "Rocky", "breed": "Pastor Alemán", "notes": "Calmado, ideal para corte." } }
+  ],
+  "appointments": [
+    { "clientIndex": 0, "service": "Baño", "dayOffset": 0, "hour": 9, "minute": 0 },
+    { "clientIndex": 1, "service": "Corte", "dayOffset": 0, "hour": 11, "minute": 30 },
+    { "clientIndex": 2, "service": "Completo", "dayOffset": 0, "hour": 15, "minute": 0 },
+    { "clientIndex": 3, "service": "Baño", "dayOffset": 0, "hour": 17, "minute": 0 },
+
+    { "clientIndex": 4, "service": "Corte", "dayOffset": 1, "hour": 10, "minute": 0 },
+    { "clientIndex": 5, "service": "Completo", "dayOffset": 1, "hour": 14, "minute": 0 },
+    { "clientIndex": 6, "service": "Baño", "dayOffset": 2, "hour": 9, "minute": 30 },
+    { "clientIndex": 7, "service": "Corte", "dayOffset": 3, "hour": 11, "minute": 0 },
+
+    { "clientIndex": 0, "service": "Baño", "dayOffset": -7, "hour": 10, "minute": 0 },
+    { "clientIndex": 2, "service": "Completo", "dayOffset": -14, "hour": 16, "minute": 0 },
+    { "clientIndex": 5, "service": "Corte", "dayOffset": -3, "hour": 12, "minute": 0 }
+  ]
+}

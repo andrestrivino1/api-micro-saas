@@ -1,0 +1,333 @@
+openapi: 3.1.0
+info:
+  title: Grooming SaaS API
+  version: 0.1.0
+  description: |
+    Contrato REST del MVP de SaaS Peluquería Canina.
+    Fuente de verdad compartida entre `api-micro-saas` (backend NestJS) y
+    `www-micro-saas` (frontend Next.js). Toda escritura está scoped por el
+    `tenantId` extraído del JWT — el cliente NUNCA envía `tenantId` en el body.
+
+servers:
+  - url: http://localhost:3001
+    description: Local dev (backend NestJS por defecto)
+  - url: https://api.grooming.example.com
+    description: Producción
+
+tags:
+  - name: Auth
+  - name: Clients
+  - name: Appointments
+  - name: Notifications
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesión demo (genera tenant ephemeral)
+      description: |
+        En el MVP, este endpoint NO requiere credenciales y siempre crea un
+        tenant ephemeral con datos demo precargados. El frontend lo invoca al
+        pulsar "Probar demo".
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [demo]
+                  default: demo
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  /clients:
+    get:
+      tags: [Clients]
+      summary: Listar clientes del tenant
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientWithPet'
+    post:
+      tags: [Clients]
+      summary: Crear cliente con mascota (en una sola acción)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCreateInput'
+      responses:
+        '201':
+          description: Cliente creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientWithPet'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /clients/{id}:
+    get:
+      tags: [Clients]
+      summary: Obtener detalle de cliente con su historial de citas
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /appointments:
+    get:
+      tags: [Appointments]
+      summary: Listar citas (filtro por fecha opcional)
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Si se omite, devuelve las citas del día actual.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+    post:
+      tags: [Appointments]
+      summary: Crear cita
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreateInput'
+      responses:
+        '201':
+          description: Cita creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /notifications/reminder:
+    post:
+      tags: [Notifications]
+      summary: Enviar (simular) recordatorio para una cita
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appointmentId]
+              properties:
+                appointmentId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Recordatorio simulado registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    ValidationError:
+      description: Payload inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado en el tenant actual
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    LoginResponse:
+      type: object
+      required: [accessToken, expiresIn, tenantId, userId]
+      properties:
+        accessToken:
+          type: string
+          description: JWT firmado HS256
+        expiresIn:
+          type: integer
+          description: Segundos hasta expiración
+        tenantId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+
+    Client:
+      type: object
+      required: [id, name, phone]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    Pet:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        breed: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    ClientWithPet:
+      allOf:
+        - $ref: '#/components/schemas/Client'
+        - type: object
+          required: [pet]
+          properties:
+            pet:
+              $ref: '#/components/schemas/Pet'
+
+    ClientDetail:
+      allOf:
+        - $ref: '#/components/schemas/ClientWithPet'
+        - type: object
+          required: [appointments]
+          properties:
+            appointments:
+              type: array
+              items:
+                $ref: '#/components/schemas/Appointment'
+
+    ClientCreateInput:
+      type: object
+      required: [name, phone, pet]
+      properties:
+        name: { type: string, minLength: 1 }
+        phone: { type: string, minLength: 6 }
+        notes: { type: string }
+        pet:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string, minLength: 1 }
+            breed: { type: string }
+            notes: { type: string }
+
+    Appointment:
+      type: object
+      required:
+        - id
+        - clientId
+        - petId
+        - scheduledAt
+        - service
+        - reminderStatus
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        petId: { type: string, format: uuid }
+        clientName: { type: string }
+        petName: { type: string }
+        scheduledAt: { type: string, format: date-time }
+        service: { type: string }
+        reminderStatus:
+          type: string
+          enum: [not_sent, sent]
+        reminderSentAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt: { type: string, format: date-time }
+
+    AppointmentCreateInput:
+      type: object
+      required: [clientId, petId, scheduledAt, service]
+      properties:
+        clientId: { type: string, format: uuid }
+        petId: { type: string, format: uuid }
+        scheduledAt: { type: string, format: date-time }
+        service: { type: string, minLength: 1 }
+
+    Notification:
+      type: object
+      required:
+        - id
+        - appointmentId
+        - clientId
+        - channel
+        - messageText
+        - sentAt
+      properties:
+        id: { type: string, format: uuid }
+        appointmentId: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        channel:
+          type: string
+          enum: [whatsapp_simulated]
+        messageText: { type: string }
+        sentAt: { type: string, format: date-time }
+
+    ErrorResponse:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode: { type: integer }
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: string }
+        error: { type: string }

@@ -22,18 +22,22 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DB_HOST'),
-        port: config.get<number>('DB_PORT'),
-        username: config.get<string>('DB_USER'),
-        password: config.get<string>('DB_PASS'),
-        database: config.get<string>('DB_NAME'),
-        autoLoadEntities: true,
-        synchronize: false,
-        migrationsRun: false,
-        migrations: ['dist/database/migrations/*.js'],
-      }),
+      useFactory: (config: ConfigService) => {
+        const useSsl = config.get<string>('DB_SSL') === 'true';
+        return {
+          type: 'postgres' as const,
+          host: config.get<string>('DB_HOST'),
+          port: config.get<number>('DB_PORT'),
+          username: config.get<string>('DB_USER'),
+          password: config.get<string>('DB_PASS'),
+          database: config.get<string>('DB_NAME'),
+          ssl: useSsl ? { rejectUnauthorized: false } : false,
+          autoLoadEntities: true,
+          synchronize: false,
+          migrationsRun: false,
+          migrations: ['dist/database/migrations/*.js'],
+        };
+      },
     }),
 
     AuthModule,

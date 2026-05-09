@@ -13,6 +13,13 @@ import { Notification } from '../modules/notifications/notification.entity';
 // this file is the source of truth for migration tooling.
 loadEnv();
 
+const isCompiled = __filename.endsWith('.js');
+const migrationsGlob = isCompiled
+  ? 'dist/database/migrations/*.js'
+  : 'src/database/migrations/*.ts';
+
+const useSsl = process.env.DB_SSL === 'true';
+
 export const AppDataSource = new DataSource({
   type: 'postgres',
   host: process.env.DB_HOST,
@@ -20,8 +27,9 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER,
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
   entities: [Tenant, User, Client, Pet, Appointment, Notification],
-  migrations: ['src/database/migrations/*.ts'],
+  migrations: [migrationsGlob],
   synchronize: false,
   logging: false,
 });

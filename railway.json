@@ -5,9 +5,10 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "node ./node_modules/typeorm/cli.js migration:run -d ./dist/database/data-source.js && node dist/main",
+    "preDeployCommand": "node ./node_modules/typeorm/cli.js migration:run -d ./dist/database/data-source.js",
+    "startCommand": "node dist/main",
     "healthcheckPath": "/health",
-    "healthcheckTimeout": 30,
+    "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }

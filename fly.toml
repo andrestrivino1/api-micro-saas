@@ -1,9 +1,11 @@
 # Fly.io app config — Grooming SaaS backend.
 # Cambia `app` al nombre que te dé `fly launch` (debe ser único en Fly.io).
-# La región `scl` (Santiago) está cerca de Colombia; alternativas: `gru` (São Paulo), `mia` (Miami).
+# Región más cercana a Colombia: `mia` (Miami). Alternativas: `gru` (São Paulo),
+# `bog` (Bogotá, si está activa), `iad` (Ashburn). Verifica disponibles con
+# `fly platform regions`.
 
 app = "api-micro-saas"
-primary_region = "scl"
+primary_region = "mia"
 
 [build]
 

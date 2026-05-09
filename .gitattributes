@@ -1,0 +1,5 @@
+# Excluye scripts auxiliares de spec-kit del cálculo de lenguajes en GitHub
+# (no son código del proyecto, son tooling para los comandos de spec-kit).
+.specify/extensions/** linguist-vendored
+.specify/scripts/** linguist-vendored
+.specify/templates/** linguist-vendored

@@ -10,7 +10,10 @@ import { Tenant } from '../tenants/tenant.entity';
 import { Appointment } from '../appointments/appointment.entity';
 import { Client } from '../clients/client.entity';
 
-export type NotificationChannel = 'whatsapp_simulated';
+export type NotificationChannel =
+  | 'whatsapp_simulated'
+  | 'whatsapp_link'
+  | 'whatsapp_cloud';
 
 @Entity('notifications')
 export class Notification {
@@ -40,13 +43,16 @@ export class Notification {
 
   @Column({
     type: 'enum',
-    enum: ['whatsapp_simulated'],
+    enum: ['whatsapp_simulated', 'whatsapp_link', 'whatsapp_cloud'],
     default: 'whatsapp_simulated',
   })
   channel!: NotificationChannel;
 
   @Column({ type: 'text' })
   messageText!: string;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  externalMessageId!: string | null;
 
   @Column({ type: 'timestamptz' })
   sentAt!: Date;

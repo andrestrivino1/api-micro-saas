@@ -5,6 +5,7 @@ import { Client } from './client.entity';
 import { Pet } from './pet.entity';
 import { Appointment } from '../appointments/appointment.entity';
 import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 
 export interface PetDto {
   id: string;
@@ -108,6 +109,51 @@ export class ClientsService {
       savedClient.pet = savedPet;
       return this.toClientWithPet(savedClient);
     });
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateClientDto,
+  ): Promise<ClientWithPetDto> {
+    return this.dataSource.transaction(async (manager) => {
+      const clientRepo = manager.getRepository(Client);
+      const petRepo = manager.getRepository(Pet);
+
+      const client = await clientRepo.findOne({
+        where: { id, tenantId },
+        relations: { pet: true },
+      });
+      if (!client) {
+        throw new NotFoundException('Cliente no encontrado en este tenant');
+      }
+
+      if (dto.name !== undefined) client.name = dto.name;
+      if (dto.phone !== undefined) client.phone = dto.phone;
+      if (dto.notes !== undefined) client.notes = dto.notes ?? null;
+      const savedClient = await clientRepo.save(client);
+
+      if (dto.pet && client.pet) {
+        const pet = client.pet;
+        if (dto.pet.name !== undefined) pet.name = dto.pet.name;
+        if (dto.pet.breed !== undefined) pet.breed = dto.pet.breed ?? null;
+        if (dto.pet.notes !== undefined) pet.notes = dto.pet.notes ?? null;
+        await petRepo.save(pet);
+        savedClient.pet = pet;
+      }
+
+      return this.toClientWithPet(savedClient);
+    });
+  }
+
+  async remove(tenantId: string, id: string): Promise<void> {
+    const client = await this.clientsRepo.findOne({
+      where: { id, tenantId },
+    });
+    if (!client) {
+      throw new NotFoundException('Cliente no encontrado en este tenant');
+    }
+    await this.clientsRepo.remove(client);
   }
 
   private toClientWithPet(client: Client): ClientWithPetDto {

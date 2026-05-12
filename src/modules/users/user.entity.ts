@@ -33,6 +33,14 @@ export class User {
   @Column({ type: 'enum', enum: ['demo', 'owner'], default: 'demo' })
   role!: UserRole;
 
+  @Column({
+    type: 'varchar',
+    length: 60,
+    nullable: true,
+    select: false,
+  })
+  passwordHash!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date;
 }

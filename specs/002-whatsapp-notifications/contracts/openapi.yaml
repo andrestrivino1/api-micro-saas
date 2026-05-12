@@ -1,0 +1,608 @@
+openapi: 3.1.0
+info:
+  title: Grooming SaaS API
+  version: 0.2.0
+  description: |
+    Contrato REST extendido para el spec 002 (WhatsApp deep-link + CRUD completo).
+    Fuente de verdad compartida entre `api-micro-saas` (backend NestJS) y
+    `www-micro-saas` (frontend Next.js). Toda escritura está scoped por el
+    `tenantId` extraído del JWT — el cliente NUNCA envía `tenantId` en el body.
+
+    Cambios vs v0.1.0 (spec 001):
+    - `POST /auth/login` ahora admite `mode: credentials` (login email/password
+      del fundador) además de `mode: demo`.
+    - Añadidos `PATCH /clients/{id}`, `DELETE /clients/{id}`.
+    - Añadidos `PATCH /appointments/{id}`, `DELETE /appointments/{id}`,
+      `GET /appointments/{id}`.
+    - Añadido `POST /notifications/whatsapp-link` (devuelve URL `wa.me`).
+    - Notification.channel enum ampliado con `whatsapp_link`.
+
+servers:
+  - url: http://localhost:3001
+    description: Local dev (backend NestJS por defecto)
+  - url: https://api.grooming.example.com
+    description: Producción
+
+tags:
+  - name: Auth
+  - name: Clients
+  - name: Appointments
+  - name: Notifications
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesión (demo ephemeral o credenciales)
+      description: |
+        Dos modos de autenticación:
+
+        - `mode: demo` (default si no se especifica) — Crea un tenant ephemeral
+          con datos demo precargados y emite un JWT de 24 h. No requiere
+          credenciales. Frontend lo invoca al pulsar "Probar demo".
+        - `mode: credentials` — Login del fundador / tenant real con
+          `email` + `password`. No hay endpoint público de registro;
+          las credenciales se siembran vía `FounderBootstrapService` en
+          el arranque del backend (ver `quickstart.md` §Founder bootstrap).
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/DemoLoginInput'
+                - $ref: '#/components/schemas/CredentialsLoginInput'
+              discriminator:
+                propertyName: mode
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Credenciales inválidas (sólo `mode: credentials`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /clients:
+    get:
+      tags: [Clients]
+      summary: Listar clientes del tenant
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientWithPet'
+    post:
+      tags: [Clients]
+      summary: Crear cliente con mascota (en una sola acción)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCreateInput'
+      responses:
+        '201':
+          description: Cliente creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientWithPet'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /clients/{id}:
+    get:
+      tags: [Clients]
+      summary: Obtener detalle de cliente con su historial de citas
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Clients]
+      summary: Editar cliente y/o su mascota (partial update)
+      description: |
+        Cualquier campo no enviado conserva su valor anterior. Permite editar
+        `pet` anidado en la misma llamada. Validaciones: `name` y `phone`
+        del cliente y `name` de la mascota no pueden quedar vacíos.
+
+        Si `phone` cambia, los próximos envíos de WhatsApp deep-link usarán
+        el nuevo número.
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientUpdateInput'
+      responses:
+        '200':
+          description: Cliente actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientWithPet'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Clients]
+      summary: Eliminar cliente (cascada elimina mascotas, citas, notificaciones)
+      description: |
+        Elimina el cliente y, por cascada de FKs, sus mascotas, citas y
+        notificaciones asociadas. El frontend DEBE pedir confirmación
+        explícita al usuario antes de invocar este endpoint (FR-019 spec 002).
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+      responses:
+        '204':
+          description: Cliente eliminado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /appointments:
+    get:
+      tags: [Appointments]
+      summary: Listar citas (filtro por día o rango)
+      description: |
+        Tres modos:
+        1. Sin parámetros — citas del día actual (zona horaria del servidor).
+        2. `?date=YYYY-MM-DD` — citas de un día específico (medianoche local).
+        3. `?from=YYYY-MM-DD&to=YYYY-MM-DD` — rango inclusivo en ambos extremos.
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+    post:
+      tags: [Appointments]
+      summary: Crear cita
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreateInput'
+      responses:
+        '201':
+          description: Cita creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /appointments/{id}:
+    get:
+      tags: [Appointments]
+      summary: Obtener detalle de una cita
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Appointments]
+      summary: Editar cita (partial update)
+      description: |
+        Cualquier campo no enviado conserva su valor anterior. Si se
+        proporciona `clientId` y/o `petId` nuevo, deben pertenecer al mismo
+        tenant y `petId.clientId == clientId`.
+
+        **Reset del recordatorio**: si cambia `clientId`, `petId` o
+        `scheduledAt`, el sistema resetea `reminderStatus` a `not_sent` y
+        `reminderSentAt` a `null` (las notificaciones previas se conservan
+        en el historial). Cambios sólo en `service` NO resetean el estado.
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentUpdateInput'
+      responses:
+        '200':
+          description: Cita actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Appointments]
+      summary: Eliminar cita
+      description: |
+        Elimina la cita y, por cascada, sus notificaciones asociadas. El
+        frontend DEBE pedir confirmación explícita (FR-019 spec 002).
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '204':
+          description: Cita eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /notifications/reminder:
+    post:
+      tags: [Notifications]
+      summary: '[DEPRECADO en spec 002] Enviar recordatorio simulado'
+      deprecated: true
+      description: |
+        Endpoint heredado de spec 001 — registra una `Notification` con
+        canal `whatsapp_simulated`. **Nuevas integraciones deben usar
+        `POST /notifications/whatsapp-link`**. Se mantiene activo para
+        compatibilidad con clientes que aún no migraron.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appointmentId]
+              properties:
+                appointmentId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Recordatorio simulado registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /notifications/whatsapp-link:
+    post:
+      tags: [Notifications]
+      summary: Generar URL wa.me y registrar el envío optimísticamente
+      description: |
+        Construye un deep-link `https://wa.me/<E164>?text=<urlencoded>` que
+        el frontend abre con `window.open` en una nueva pestaña, cargando
+        WhatsApp Web / app del dueño con el chat del cliente y el mensaje
+        pre-cargado.
+
+        El backend:
+        1. Carga la cita y su cliente (verifica `tenantId`).
+        2. Normaliza `client.phone` a formato E.164 (default country: CO).
+        3. Si el teléfono es inválido → `400 INVALID_PHONE`.
+        4. Si el cliente no tiene teléfono → `400 CLIENT_HAS_NO_PHONE`.
+        5. Compone el `messageText` (custom si viene en body, o template
+           default).
+        6. Registra una `Notification` con `channel = whatsapp_link`.
+        7. Marca la cita como `reminderStatus = sent` con `reminderSentAt`.
+        8. Devuelve el registro junto con `whatsappUrl`.
+
+        **El estado "Enviado" es optimista**: el backend no puede saber si
+        el dueño efectivamente pulsó Enviar dentro de WhatsApp ni si el
+        cliente recibió el mensaje.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendWhatsappLinkInput'
+      responses:
+        '201':
+          description: Notificación registrada con URL `wa.me` listo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsappLinkNotification'
+        '400':
+          description: Teléfono inválido o ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AppointmentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    ValidationError:
+      description: Payload inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado en el tenant actual
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    DemoLoginInput:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [demo]
+
+    CredentialsLoginInput:
+      type: object
+      required: [mode, email, password]
+      properties:
+        mode:
+          type: string
+          enum: [credentials]
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginResponse:
+      type: object
+      required: [accessToken, expiresIn, tenantId, userId, role]
+      properties:
+        accessToken:
+          type: string
+          description: JWT firmado HS256
+        expiresIn:
+          type: integer
+          description: Segundos hasta expiración
+        tenantId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [demo, owner]
+
+    Client:
+      type: object
+      required: [id, name, phone]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    Pet:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        breed: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    ClientWithPet:
+      allOf:
+        - $ref: '#/components/schemas/Client'
+        - type: object
+          required: [pet]
+          properties:
+            pet:
+              $ref: '#/components/schemas/Pet'
+
+    ClientDetail:
+      allOf:
+        - $ref: '#/components/schemas/ClientWithPet'
+        - type: object
+          required: [appointments]
+          properties:
+            appointments:
+              type: array
+              items:
+                $ref: '#/components/schemas/Appointment'
+
+    ClientCreateInput:
+      type: object
+      required: [name, phone, pet]
+      properties:
+        name: { type: string, minLength: 1 }
+        phone: { type: string, minLength: 6 }
+        notes: { type: string }
+        pet:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string, minLength: 1 }
+            breed: { type: string }
+            notes: { type: string }
+
+    ClientUpdateInput:
+      type: object
+      description: |
+        Partial update. Cualquier campo omitido conserva su valor anterior.
+        El objeto `pet` también es opcional y partial.
+      properties:
+        name: { type: string, minLength: 1 }
+        phone: { type: string, minLength: 6 }
+        notes: { type: string, nullable: true }
+        pet:
+          type: object
+          properties:
+            name: { type: string, minLength: 1 }
+            breed: { type: string, nullable: true }
+            notes: { type: string, nullable: true }
+
+    Appointment:
+      type: object
+      required:
+        - id
+        - clientId
+        - petId
+        - scheduledAt
+        - service
+        - reminderStatus
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        petId: { type: string, format: uuid }
+        clientName: { type: string }
+        petName: { type: string }
+        scheduledAt: { type: string, format: date-time }
+        service: { type: string }
+        reminderStatus:
+          type: string
+          enum: [not_sent, sent]
+        reminderSentAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt: { type: string, format: date-time }
+
+    AppointmentCreateInput:
+      type: object
+      required: [clientId, petId, scheduledAt, service]
+      properties:
+        clientId: { type: string, format: uuid }
+        petId: { type: string, format: uuid }
+        scheduledAt: { type: string, format: date-time }
+        service: { type: string, minLength: 1 }
+
+    AppointmentUpdateInput:
+      type: object
+      description: |
+        Partial update. Cualquier campo omitido conserva su valor anterior.
+        Cambiar `clientId`, `petId` o `scheduledAt` resetea el estado del
+        recordatorio a `not_sent`.
+      properties:
+        clientId: { type: string, format: uuid }
+        petId: { type: string, format: uuid }
+        scheduledAt: { type: string, format: date-time }
+        service: { type: string, minLength: 1 }
+
+    Notification:
+      type: object
+      required:
+        - id
+        - appointmentId
+        - clientId
+        - channel
+        - messageText
+        - sentAt
+      properties:
+        id: { type: string, format: uuid }
+        appointmentId: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        channel:
+          type: string
+          enum: [whatsapp_simulated, whatsapp_link]
+        messageText: { type: string }
+        sentAt: { type: string, format: date-time }
+
+    SendWhatsappLinkInput:
+      type: object
+      required: [appointmentId]
+      properties:
+        appointmentId: { type: string, format: uuid }
+        customMessage:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: |
+            Texto personalizado para esta notificación (FR-010 spec 002). Si
+            se omite, el backend usa el template default
+            (`composeReminderText`).
+
+    WhatsappLinkNotification:
+      allOf:
+        - $ref: '#/components/schemas/Notification'
+        - type: object
+          required: [whatsappUrl]
+          properties:
+            whatsappUrl:
+              type: string
+              format: uri
+              description: |
+                URL completo `https://wa.me/<E164>?text=<urlencoded>` que el
+                frontend abre con `window.open(url, '_blank', 'noopener,noreferrer')`.
+
+    ErrorResponse:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode: { type: integer }
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: string }
+        error: { type: string }
+        code:
+          type: string
+          description: |
+            Código machine-readable (e.g. `INVALID_PHONE`, `CLIENT_HAS_NO_PHONE`).
+            Sólo presente cuando el backend lo provee.

@@ -9,6 +9,7 @@ import { Appointment } from './appointment.entity';
 import { Client } from '../clients/client.entity';
 import { Pet } from '../clients/pet.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 export interface AppointmentDto {
   id: string;
@@ -138,6 +139,78 @@ export class AppointmentsService {
     appointment.reminderStatus = 'sent';
     appointment.reminderSentAt = sentAt;
     await this.apptsRepo.save(appointment);
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateAppointmentDto,
+  ): Promise<AppointmentDto> {
+    const appt = await this.apptsRepo.findOne({
+      where: { id, tenantId },
+      relations: { client: true, pet: true },
+    });
+    if (!appt) {
+      throw new NotFoundException('Cita no encontrada en este tenant');
+    }
+
+    const nextClientId = dto.clientId ?? appt.clientId;
+    const nextPetId = dto.petId ?? appt.petId;
+
+    if (dto.clientId || dto.petId) {
+      const client = await this.clientsRepo.findOne({
+        where: { id: nextClientId, tenantId },
+      });
+      if (!client) {
+        throw new NotFoundException('Cliente no encontrado en este tenant');
+      }
+      const pet = await this.petsRepo.findOne({
+        where: { id: nextPetId, tenantId },
+      });
+      if (!pet) {
+        throw new NotFoundException('Mascota no encontrada en este tenant');
+      }
+      if (pet.clientId !== client.id) {
+        throw new BadRequestException(
+          'La mascota no pertenece al cliente indicado',
+        );
+      }
+      appt.client = client;
+      appt.pet = pet;
+    }
+
+    const nextScheduledAt = dto.scheduledAt
+      ? new Date(dto.scheduledAt)
+      : appt.scheduledAt;
+
+    const reminderShouldReset =
+      (dto.clientId !== undefined && dto.clientId !== appt.clientId) ||
+      (dto.petId !== undefined && dto.petId !== appt.petId) ||
+      (dto.scheduledAt !== undefined &&
+        nextScheduledAt.getTime() !== appt.scheduledAt.getTime());
+
+    appt.clientId = nextClientId;
+    appt.petId = nextPetId;
+    appt.scheduledAt = nextScheduledAt;
+    if (dto.service !== undefined) appt.service = dto.service;
+
+    if (reminderShouldReset) {
+      appt.reminderStatus = 'not_sent';
+      appt.reminderSentAt = null;
+    }
+
+    const saved = await this.apptsRepo.save(appt);
+    return this.toDto(saved);
+  }
+
+  async remove(tenantId: string, id: string): Promise<void> {
+    const appt = await this.apptsRepo.findOne({
+      where: { id, tenantId },
+    });
+    if (!appt) {
+      throw new NotFoundException('Cita no encontrada en este tenant');
+    }
+    await this.apptsRepo.remove(appt);
   }
 
   toDto(a: Appointment): AppointmentDto {

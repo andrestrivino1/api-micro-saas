@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +18,7 @@ import {
   ClientsService,
 } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 
 @Controller('clients')
 @UseGuards(JwtAuthGuard)
@@ -42,5 +45,23 @@ export class ClientsController {
     @Body() dto: CreateClientDto,
   ): Promise<ClientWithPetDto> {
     return this.clients.create(tenantId, dto);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentTenant() tenantId: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateClientDto,
+  ): Promise<ClientWithPetDto> {
+    return this.clients.update(tenantId, id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(
+    @CurrentTenant() tenantId: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<void> {
+    await this.clients.remove(tenantId, id);
   }
 }

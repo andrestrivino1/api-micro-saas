@@ -20,10 +20,15 @@ function humanizeTime(date: Date): string {
     hour12: true,
     timeZone: 'America/Bogota',
   });
-  return fmt.format(date).replace('a. m.', 'am').replace('p. m.', 'pm');
+  // Intl puede usar espacios "no separables" (U+00A0, U+202F) entre "p." y
+  // "m." — usamos \s para capturar cualquier whitespace y limpiamos al "am/pm".
+  return fmt
+    .format(date)
+    .replace(/a\.\s+m\./i, 'am')
+    .replace(/p\.\s+m\./i, 'pm');
 }
 
-function humanizeWhen(scheduledAt: Date, now: Date): string {
+export function humanizeWhen(scheduledAt: Date, now: Date = new Date()): string {
   const today = startOfDay(now);
   const target = startOfDay(scheduledAt);
   const diffDays = Math.round((target.getTime() - today.getTime()) / dayMs);
